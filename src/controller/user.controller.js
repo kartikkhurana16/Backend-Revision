@@ -29,7 +29,7 @@ const userRegister=asyncHandler(async (req,res)=>{
     }
 
     const existedUser=await User.findOne({
-        $or:[{username},{email}]
+        $or:[{username:username.toLowerCase()},{email:email.toLowerCase()}]
     })
     if(existedUser){
         throw new ApiError(409,"user with email or username already exists")
@@ -56,11 +56,11 @@ const userRegister=asyncHandler(async (req,res)=>{
 const userLogin=asyncHandler(async(req,res)=>{
     const {email,username,password}=req.body;
 
-    if(!(username || email) && !password){
+    if(!(username || email) || !password){
         throw new ApiError(400,"all the credentials are required to login")
     }
     const user=await User.findOne({
-        $or:[{username},{email}]
+        $or:[{username:username?.toLowerCase()},{email:email?.toLowerCase()}]
     })
     if(!user){
         throw new ApiError(404,"user not found")
@@ -68,7 +68,7 @@ const userLogin=asyncHandler(async(req,res)=>{
 
     const isPasswordValid=await user.isPasswordCorrect(password)
         if(!isPasswordValid){
-            throw new ApiError(404,"invalid credentials")
+            throw new ApiError(401,"invalid credentials")
         }
 
 const { accessToken, refreshToken } = await generateAccessAndRefereshToken(user._id);
@@ -92,12 +92,9 @@ const { accessToken, refreshToken } = await generateAccessAndRefereshToken(user.
 const userLogout=asyncHandler(async(req,res)=>{
     await User.findByIdAndUpdate(req.user._id,
         {
-            $set:{
-                refreshToken:undefined
+            $unset:{
+                refreshToken:1
             }
-        },
-        {
-            new :true
         }
     )
 
@@ -107,8 +104,8 @@ const userLogout=asyncHandler(async(req,res)=>{
     }
 
     return res.status(200)
-            .clearcookie("accessToken",option)
-            .clearcookie("refreshToken",option)
+            .clearCookie("accessToken",option)
+            .clearCookie("refreshToken",option)
             .json(new ApiResponse(200,{},"User logged out successfully"))
 })
 
@@ -129,7 +126,7 @@ const changeUserPassword=asyncHandler(async(req,res)=>{
     await user.save({validateBeforeSave:false})
 
     return res.status(200)
-            .json(new ApiResponse(200,"password updated succeefully"))
+            .json(new ApiResponse(200,{},"password updated successfully"))
 })
 
 
