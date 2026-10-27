@@ -188,7 +188,7 @@ const forgotPassword=asyncHandler(async(req,res)=>{
         return res.status(200).json(response)
     }
 
-    const code=crypto.randomInt(100000,1000000).toString();
+    const code=crypto.randomInt(100000,1000000).toString(); // random number is generated 
 
     user.verificationCode=hashCode(code);
     user.verificationCodeExpiry=new Date(Date.now()+VERIFICATION_CODE_EXPIRY_MS);
