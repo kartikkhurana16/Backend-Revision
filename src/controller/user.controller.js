@@ -129,11 +129,51 @@ const changeUserPassword=asyncHandler(async(req,res)=>{
             .json(new ApiResponse(200,{},"password updated successfully"))
 })
 
+const refreshTokenAccess = asyncHandler(async (req, res) => {
+    const incomingRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken
+    if (!incomingRefreshToken) {
+        throw new ApiError(401, "unauthorized request")
+    }
+
+    try {
+        const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET)
+
+        const user = await User.findById(decodedToken?._id);
+        if (!user) {
+            throw new ApiError(401, "invalid refresh token")
+        }
+        if (incomingRefreshToken !== user?.refreshToken) {
+            throw new ApiError(401, "Refresh token is expired or used")
+        }
+
+        const options = {
+            httpOnly: true,
+            secure: true
+        }
+
+        const { accessToken, refreshToken: newRefreshToken } = await generateAccessAndRefereshToken(user._id)
+
+        return res.status(200)
+            .cookie("accessToken", accessToken, options)
+            .cookie("refreshToken", newRefreshToken, options)
+            .json(new ApiResponse(200, { accessToken, refreshToken: newRefreshToken }, "access token refreshed"));
+    } catch (error) {
+        throw new ApiError(401, error?.message || "invalid refresh token");
+    }
+})
+
+const getCurrentUser=asyncHandler(async(req,res)=>{
+    return res
+    .status(200)
+    .json(new ApiResponse(200 ,req.user,"current user fetched succesfully"))
+})
 
 
 export {
     userRegister,
     userLogin,
     userLogout,
-    changeUserPassword
+    changeUserPassword,
+    refreshTokenAccess,
+    getCurrentUser
 };
