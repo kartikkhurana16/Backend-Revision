@@ -4,6 +4,12 @@ import { User } from "../model/user.models.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken"
 import mongoose from "mongoose";
+import crypto from "crypto"
+import { sendEmail } from "../utils/sendEmail.js";
+
+const VERIFICATION_CODE_EXPIRY_MS=10*60*1000; // 10 minutes
+
+const hashCode=(code)=>crypto.createHash("sha256").update(code).digest("hex");
 
 const generateAccessAndRefereshToken=async(userId)=>{
     try {
@@ -24,7 +30,7 @@ const generateAccessAndRefereshToken=async(userId)=>{
 const userRegister=asyncHandler(async (req,res)=>{
     const {fullName,email,username,password}=req.body;
 
-    if([fullName,email,username,password].some((field)=>!field || field?.trim()==="")){
+    if([fullName,email,username,password].some((field)=>!field || String(field).trim()==="")){
         throw new ApiError(400,"all field are required");
     }
 
@@ -168,6 +174,71 @@ const getCurrentUser=asyncHandler(async(req,res)=>{
     .json(new ApiResponse(200 ,req.user,"current user fetched succesfully"))
 })
 
+const forgotPassword=asyncHandler(async(req,res)=>{
+    const {email}=req.body;
+    if(!email || email.trim()===""){
+        throw new ApiError(400,"email is required")
+    }
+
+    const user=await User.findOne({email:email.toLowerCase().trim()})
+
+    // same response whether or not the email exists, so accounts can't be enumerated
+    const response=new ApiResponse(200,{},"if an account exists for this email, a verification code has been sent")
+    if(!user){
+        return res.status(200).json(response)
+    }
+
+    const code=crypto.randomInt(100000,1000000).toString();
+
+    user.verificationCode=hashCode(code);
+    user.verificationCodeExpiry=new Date(Date.now()+VERIFICATION_CODE_EXPIRY_MS);
+    await user.save({validateBeforeSave:false})
+
+    try {
+        await sendEmail({
+            to:user.email,
+            subject:"Your password reset verification code",
+            text:`Your verification code is ${code}. It expires in 10 minutes.`,
+            html:`<p>Your verification code is <b>${code}</b>.</p><p>It expires in 10 minutes. If you did not request a password reset, ignore this email.</p>`
+        })
+    } catch (error) {
+        user.verificationCode=undefined;
+        user.verificationCodeExpiry=undefined;
+        await user.save({validateBeforeSave:false})
+        throw new ApiError(500,"failed to send verification email")
+    }
+
+    return res.status(200).json(response)
+})
+
+const resetPassword=asyncHandler(async(req,res)=>{
+    const {email,code,newPassword}=req.body;
+    if([email,code,newPassword].some((field)=>!field || String(field).trim()==="")){
+        throw new ApiError(400,"email, code and new password are required")
+    }
+
+    const user=await User.findOne({email:email.toLowerCase().trim()})
+
+    if(
+        !user ||
+        !user.verificationCode ||
+        user.verificationCode!==hashCode(String(code).trim()) ||
+        user.verificationCodeExpiry<Date.now()
+    ){
+        throw new ApiError(400,"invalid or expired verification code")
+    }
+
+    user.password=newPassword;
+    user.isVerified=true;
+    user.verificationCode=undefined;
+    user.verificationCodeExpiry=undefined;
+    user.refreshToken=undefined; // log out existing sessions
+    await user.save({validateBeforeSave:false})
+
+    return res.status(200)
+            .json(new ApiResponse(200,{},"password reset successfully"))
+})
+
 
 export {
     userRegister,
@@ -175,5 +246,7 @@ export {
     userLogout,
     changeUserPassword,
     refreshTokenAccess,
-    getCurrentUser
+    getCurrentUser,
+    forgotPassword,
+    resetPassword
 };

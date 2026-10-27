@@ -5,7 +5,9 @@ import {
     userRegister,
     changeUserPassword,
     getCurrentUser,
-    refreshTokenAccess
+    refreshTokenAccess,
+    forgotPassword,
+    resetPassword
 } from "../controller/user.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 
@@ -23,5 +25,9 @@ router.route("/change-password").patch(verifyJWT,changeUserPassword);
 router.route("/current-user").get(verifyJWT,getCurrentUser)
 
 router.route("/refresh-token").post(refreshTokenAccess)
+
+router.route("/forgot-password").post(forgotPassword)
+
+router.route("/reset-password").post(resetPassword)
 
 export default router;
